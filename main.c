@@ -38,7 +38,7 @@ void set(int y, int x, char c, int status);
 void draw(int y, int x);
 
 struct notify {
-	unsigned* notemask;
+	unsigned offmask;
 	int octave;
 	snd_seq_t* seq;
 };
@@ -50,11 +50,13 @@ void noteoff_timer_func(union sigval sig) {
 	snd_seq_ev_set_source(&ev, 0);
 	snd_seq_ev_set_subs(&ev);
 	snd_seq_ev_set_direct(&ev);
+	//mvprintw(0, 0, "off-mask %08x", nfy->offmask);
+	//refresh();
 	int i = 0;
 	for (; i < sizeof(unsigned)*8; i++) {
-		if ((*(nfy->notemask) >> i) & 0x1) {
+		if ((nfy->offmask >> i) & 0x1) {
 			snd_seq_ev_set_noteoff(&ev, 0, i + (nfy->octave * 12), 0);
-			*(nfy->notemask) &= ~(0x1 << i);
+			nfy->offmask &= ~(0x1 << i);
 			snd_seq_event_output_direct(nfy->seq, &ev);
 		}
 	}
@@ -101,7 +103,7 @@ int main(int argc, char** argv)
 	int octave = 3;
 	// Note-off timer
 	timer_t note_timer;
-	struct notify signotify = { &notemask, octave, seq };
+	struct notify signotify = { 0, octave, seq };
 	struct sigevent sig = (struct sigevent){
 		.sigev_notify = SIGEV_THREAD,
 		.sigev_value = (union sigval) { .sival_ptr = &signotify },
@@ -122,10 +124,6 @@ int main(int argc, char** argv)
 	//Y for rows
 	int row1 = posy+6;
 	int row2 = posy+3;
-	//Last times vars
-	int last = 0;
-	int lx;
-	int ly;
 	//xy
 	int x,y;
 	//length
@@ -321,12 +319,9 @@ int main(int argc, char** argv)
 		}
 		if (y != -1) {
 			set(y, x, c, 0);
-		}
-		if (c == KEY_DOWN || c == KEY_UP || c == KEY_LEFT || c == KEY_RIGHT) {
-			refresh();
-		} else {
 			play(seq, notemask, octave);
-			//signotify.notemask = notemask;
+			signotify.offmask |= notemask;
+			notemask = 0;
 			signotify.octave = octave;
 			if (timer_gettime(note_timer, NULL)) {
 				struct itimerspec time = {{ 0 }};
@@ -334,9 +329,9 @@ int main(int argc, char** argv)
 				timer_settime(note_timer, 0, &time, NULL);
 			}
 		}
-		last = c;
-		ly = y;
-		lx = x;
+		if (c == KEY_DOWN || c == KEY_UP || c == KEY_LEFT || c == KEY_RIGHT) {
+			refresh();
+		}
 	}
 	endwin();
 	snd_seq_close(seq);
