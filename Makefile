@@ -1,6 +1,6 @@
 CFLAGS = -lcurses
 default: program
 program: main.c
-	gcc $(CFLAGS) main.c -o npiano
+	gcc $(CFLAGS) main.c -o mnpiano
 clean:
-	-rm -f npiano
+	-rm -f mnpiano
