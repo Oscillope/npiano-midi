@@ -4,31 +4,31 @@
 #include <unistd.h> //For sleep
 #include <alsa/asoundlib.h>
 
-#define C	48
-#define C_	49
-#define D	50
-#define D_	51
-#define E	52
-#define F	53
-#define F_	54
-#define G	55
-#define G_	56
-#define A	57
-#define A_	58
-#define B	59
-#define C1	60
-#define C_1	61
-#define D1	62
-#define D_1	63
-#define E1	64
-#define F1	65
-#define F_1	66
-#define G1	67
-#define G_1	68
-#define A1	69
-#define A_1	70
-#define B1	71
-#define C2	72
+#define C	12+(octave*12)
+#define C_	C+1
+#define D	C+2
+#define D_	C+3
+#define E	C+4
+#define F	C+5
+#define F_	C+6
+#define G	C+7
+#define G_	C+8
+#define A	C+9
+#define A_	C+10
+#define B	C+11
+#define C1	C+12
+#define C_1	C1+1
+#define D1	C1+2
+#define D_1	C1+3
+#define E1	C1+4
+#define F1	C1+5
+#define F_1	C1+6
+#define G1	C1+7
+#define G_1	C1+8
+#define A1	C1+9
+#define A_1	C1+10
+#define B1	C1+11
+#define C2	C1+12
 
 void play(snd_seq_t* s, int n, int l);
 void set(int y, int x, char c, int status);
@@ -90,6 +90,7 @@ int main(int argc, char** argv)
 	int x,y;
 	//length
 	int leng = 100;
+	int octave = 3;
 	//Loop until user quits
 	while ((c = getch()) != EOF) {
 		switch (c) {
@@ -101,14 +102,28 @@ int main(int argc, char** argv)
 				if (leng > 0) {
 					leng-=10;
 				}
-				mvprintw(0, COLS-4, "%4d", leng);
+				mvprintw(0, COLS-11, "Length %4d", leng);
 				break;
 			case KEY_UP:
 				y = -1;
 				if (leng < 1000) {
 					leng+=10;
 				}
-				mvprintw(0, COLS-4, "%4d", leng);
+				mvprintw(0, COLS-11, "Length %4d", leng);
+				break;
+			case KEY_LEFT:
+				y = -1;
+				if (octave > 1) {
+					octave--;
+				}
+				mvprintw(0, 0, "Octave %d", octave);
+				break;
+			case KEY_RIGHT:
+				y = -1;
+				if (octave < 5) {
+					octave++;
+				}
+				mvprintw(0, 0, "Octave %d", octave);
 				break;
 			case 'z':
 				y = row1;
@@ -268,7 +283,7 @@ int main(int argc, char** argv)
 		if (y != -1) {
 			set(y, x, c, 0);
 		}
-		if (c == KEY_DOWN || c == KEY_UP) {
+		if (c == KEY_DOWN || c == KEY_UP || c == KEY_LEFT || c == KEY_RIGHT) {
 			refresh();
 		}
 		last = c;
