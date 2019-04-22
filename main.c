@@ -39,8 +39,35 @@ void draw(int y, int x);
  *	Enzo Barrett
  */
 
+void usage(char* name)
+{
+	printf("Usage: %s CLIENT:PORT\n", name);
+}
+
 int main(int argc, char** argv)
 {
+	if (argc < 2) {
+		usage(argv[0]);
+		exit(-1);
+	}
+	char* port_str = argv[1];
+	const char* client_str = strsep(&port_str, ":");
+	if (!port_str || !client_str) {
+		usage(argv[0]);
+		exit(-1);
+	}
+	unsigned dest_client = atoi(client_str);
+	unsigned dest_port = atoi(port_str);
+	if (dest_client >= 255) {
+		printf("CLIENT should be < 255\n");
+		usage(argv[0]);
+		exit(-1);
+	}
+	if (dest_port >= 255) {
+		printf("PORT should be < 255\n");
+		usage(argv[0]);
+		exit(-1);
+	}
 	// ALSA seq
 	snd_seq_t *seq;
 	int err = snd_seq_open(&seq, "default", SND_SEQ_OPEN_OUTPUT, 0);
@@ -56,7 +83,7 @@ int main(int argc, char** argv)
 		snd_seq_close(seq);
 		exit(port);
 	}
-	err = snd_seq_connect_to(seq, port, atoi(argv[1]), 0);
+	err = snd_seq_connect_to(seq, port, dest_client, dest_port);
 	if (err) {
 		printf("Couldn't connect to synth: %s\n", snd_strerror(err));
 		snd_seq_close(seq);
@@ -95,8 +122,8 @@ int main(int argc, char** argv)
 	while ((c = getch()) != EOF) {
 		switch (c) {
 			case KEY_RESIZE:
-				endwin();
-				return 1;
+			case KEY_BACKSPACE:
+				goto exit;
 			case KEY_DOWN:
 				y = -1;
 				if (leng > 0) {
@@ -290,6 +317,7 @@ int main(int argc, char** argv)
 		ly = y;
 		lx = x;
 	}
+exit:
 	endwin();
 	snd_seq_close(seq);
 	return 0;
