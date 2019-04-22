@@ -30,14 +30,16 @@
 #define B1	C1+11
 #define C2	C1+12
 
-void play(snd_seq_t* s, int n, int l);
-void set(int y, int x, char c, int status);
-void draw(int y, int x);
-
 /*
  *	Keyboard Playing Program
  *	Enzo Barrett
+ *	ALSA seq support added by
+ *	Jason Rosenman
  */
+
+void play(snd_seq_t* s, int n, int l);
+void set(int y, int x, char c, int status);
+void draw(int y, int x);
 
 void usage(char* name)
 {
@@ -103,7 +105,7 @@ int main(int argc, char** argv)
 	int posx = (COLS/2)-30;
 	int posy = (LINES/2)-5;
 	draw(posy,posx);
-	mvprintw(0, 0, "client %d port %d connected to %d", snd_seq_client_id(seq), port, atoi(argv[1]));
+	mvprintw(0, 0, "%d:%d connected to %u:%u", snd_seq_client_id(seq), port, dest_client, dest_port);
 	//Input holder
 	int c;
 	//Y for rows
