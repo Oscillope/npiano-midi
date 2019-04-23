@@ -9,7 +9,7 @@
 
 ## Building
 
-You need both the `curses` and `asound` libraries to build. If you don't have them, the install process will depend on your distro. After that, it should build simply with `make`. I haven't made a `make install` yet, maybe once this project matures a little bit I will. If you really want to install it, copy the binary to somewhere in your `PATH`.
+You need the `curses`, `asound`, and `rt` libraries to build. If you don't have them, the install process will depend on your distro. After that, it should build simply with `make`. I haven't made a `make install` yet, maybe once this project matures a little bit I will. If you really want to install it, copy the binary to somewhere in your `PATH`.
 
 ## Usage
 
@@ -29,3 +29,7 @@ Then run `mnpiano`:
 $ ./mnpiano 128:0
 ```
 Use backspace or CTRL-C to exit.
+
+## Tips
+
+This is more of a TiMidity tip than anything, but in general you'll want to lower the latency to make the keyboard more responsive. You can do this by starting TiMidity with the `-B2,8` option. This will cause TiMidity to use smaller output buffers.

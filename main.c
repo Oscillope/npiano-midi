@@ -64,8 +64,6 @@ void noteoff_timer_func(union sigval sig) {
 	snd_seq_ev_set_source(&ev, 0);
 	snd_seq_ev_set_subs(&ev);
 	snd_seq_ev_set_direct(&ev);
-	//mvprintw(0, 0, "off-mask %08x", data->offmask);
-	//refresh();
 	int i = 0;
 	for (; i < sizeof(data->keyboard_array); i++) {
 		if ((data->offmask >> i) & 0x1) {
@@ -364,7 +362,6 @@ void play(snd_seq_t* s, unsigned mask, int octave)
 		clrtoeol();
 		refresh();
 	}
-	//usleep(len*1000);
 }
 
 void set(int x, int y, int state)
