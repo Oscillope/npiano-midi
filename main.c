@@ -41,32 +41,87 @@
  */
 
 void play(snd_seq_t* s, unsigned m, int o);
-void set(int y, int x, char c, int status);
-void draw(int y, int x);
+void set(int x, int y, int status);
+void draw(int x, int y);
 
-struct notify {
-	unsigned offmask;
-	int octave;
+struct point {
+	int x;
+	int y;
+};
+
+struct mnp_data {
 	snd_seq_t* seq;
+	struct point keyboard_array[25];	/* 25 keys */
+	unsigned notemask;
+	unsigned offmask;
+	unsigned octave;
 };
 
 void noteoff_timer_func(union sigval sig) {
-	struct notify* nfy = (struct notify*)sig.sival_ptr;
+	struct mnp_data* data = (struct mnp_data*)sig.sival_ptr;
 	snd_seq_event_t ev;
 	snd_seq_ev_clear(&ev);
 	snd_seq_ev_set_source(&ev, 0);
 	snd_seq_ev_set_subs(&ev);
 	snd_seq_ev_set_direct(&ev);
-	//mvprintw(0, 0, "off-mask %08x", nfy->offmask);
+	//mvprintw(0, 0, "off-mask %08x", data->offmask);
 	//refresh();
 	int i = 0;
-	for (; i < sizeof(unsigned)*8; i++) {
-		if ((nfy->offmask >> i) & 0x1) {
-			snd_seq_ev_set_noteoff(&ev, 0, i + (nfy->octave * 12), 0);
-			nfy->offmask &= ~(0x1 << i);
-			snd_seq_event_output_direct(nfy->seq, &ev);
+	for (; i < sizeof(data->keyboard_array); i++) {
+		if ((data->offmask >> i) & 0x1) {
+			snd_seq_ev_set_noteoff(&ev, 0, i + (data->octave * 12), 0);
+			data->offmask &= ~(0x1 << i);
+			snd_seq_event_output_direct(data->seq, &ev);
+			int x = data->keyboard_array[i].x;
+			int y = data->keyboard_array[i].y;
+			set(x, y, 0);
 		}
 	}
+}
+
+unsigned set_note(struct mnp_data* data, unsigned note)
+{
+	if (data->offmask & note) {
+		return false;
+	} else {
+		data->notemask |= note;
+		int x = data->keyboard_array[__builtin_ctz(note)].x;
+		int y = data->keyboard_array[__builtin_ctz(note)].y;
+		set(x, y, 1);
+	}
+	return true;
+}
+
+void build_key_table(struct mnp_data* data, int posx, int posy)
+{
+	//Y for rows
+	int row1 = posy + 6;
+	int row2 = posy + 3;
+	data->keyboard_array[0]  = (struct point){posx + 2, row1};	// z
+	data->keyboard_array[1]  = (struct point){posx + 4, row2};	// s
+	data->keyboard_array[2]  = (struct point){posx + 6, row1};	// x
+	data->keyboard_array[3]  = (struct point){posx + 8, row2};	// d
+	data->keyboard_array[4]  = (struct point){posx + 10, row1};	// c
+	data->keyboard_array[5]  = (struct point){posx + 14, row1};	// v
+	data->keyboard_array[6]  = (struct point){posx + 16, row2};	// g
+	data->keyboard_array[7]  = (struct point){posx + 18, row1};	// b
+	data->keyboard_array[8]  = (struct point){posx + 20, row2};	// h
+	data->keyboard_array[9]  = (struct point){posx + 22, row1};	// n
+	data->keyboard_array[10] = (struct point){posx + 24, row2};	// j
+	data->keyboard_array[11] = (struct point){posx + 26, row1};	// m
+	data->keyboard_array[12] = (struct point){posx + 30, row1};	// q
+	data->keyboard_array[13] = (struct point){posx + 32, row2};	// 2
+	data->keyboard_array[14] = (struct point){posx + 34, row1};	// w
+	data->keyboard_array[15] = (struct point){posx + 36, row2};	// 3
+	data->keyboard_array[16] = (struct point){posx + 38, row1};	// e
+	data->keyboard_array[17] = (struct point){posx + 42, row1};	// r
+	data->keyboard_array[18] = (struct point){posx + 44, row2};	// 5
+	data->keyboard_array[19] = (struct point){posx + 46, row1};	// t
+	data->keyboard_array[20] = (struct point){posx + 48, row2};	// 6
+	data->keyboard_array[21] = (struct point){posx + 50, row1};	// y
+	data->keyboard_array[22] = (struct point){posx + 52, row2};	// 7
+	data->keyboard_array[23] = (struct point){posx + 54, row1};	// u
+	data->keyboard_array[24] = (struct point){posx + 58, row1};	// i
 }
 
 void usage(char* name)
@@ -98,31 +153,32 @@ int main(int argc, char** argv)
 		usage(argv[0]);
 		exit(-1);
 	}
+	// Data token
+	struct mnp_data data = {NULL, { 0 }, 0, 0, 3};
 	// ALSA seq
-	snd_seq_t* seq;
-	int err = snd_seq_open(&seq, "default", SND_SEQ_OPEN_OUTPUT, 0);
+	int err = snd_seq_open(&(data.seq), "default", SND_SEQ_OPEN_OUTPUT, 0);
 	if (err) {
 		printf("Error opening ALSA seq: %s\n", snd_strerror(err));
 		exit(err);
 	}
-	int port = snd_seq_create_simple_port(seq, "mnpiano",
+	int port = snd_seq_create_simple_port(data.seq, "mnpiano",
 		SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ | SND_SEQ_PORT_CAP_SYNC_READ,
 		SND_SEQ_PORT_TYPE_APPLICATION | SND_SEQ_PORT_TYPE_MIDI_GENERIC);
 	if (port < 0) {
 		printf("Error opening ALSA port: %s\n", snd_strerror(port));
-		snd_seq_close(seq);
+		snd_seq_close(data.seq);
 		exit(port);
 	}
-	err = snd_seq_connect_to(seq, port, dest_client, dest_port);
+	err = snd_seq_connect_to(data.seq, port, dest_client, dest_port);
 	if (err) {
 		printf("Couldn't connect to synth: %s\n", snd_strerror(err));
-		snd_seq_close(seq);
+		snd_seq_close(data.seq);
 		exit(err);
 	}
-	err = snd_seq_set_output_buffer_size(seq, 512);
+	err = snd_seq_set_output_buffer_size(data.seq, 512);
 	if (err) {
 		printf("Couldn't set buffer size: %s\n", snd_strerror(err));
-		snd_seq_close(seq);
+		snd_seq_close(data.seq);
 		exit(err);
 	}
 	// mask of notes on
@@ -130,10 +186,9 @@ int main(int argc, char** argv)
 	int octave = 3;
 	// Note-off timer
 	timer_t note_timer;
-	struct notify signotify = { 0, octave, seq };
 	struct sigevent sig = (struct sigevent){
 		.sigev_notify = SIGEV_THREAD,
-		.sigev_value = (union sigval) { .sival_ptr = &signotify },
+		.sigev_value = (union sigval) { .sival_ptr = &data },
 		.sigev_notify_function = noteoff_timer_func
 	};
 	timer_create(CLOCK_MONOTONIC, &sig, &note_timer);
@@ -144,212 +199,127 @@ int main(int argc, char** argv)
 	//Print keyboard
 	int posx = (COLS/2)-30;
 	int posy = (LINES/2)-5;
-	draw(posy,posx);
-	mvprintw(0, 0, "%d:%d connected to %u:%u", snd_seq_client_id(seq), port, dest_client, dest_port);
+	build_key_table(&data, posx, posy);
+	draw(posx, posy);
+	mvprintw(0, 0, "%d:%d connected to %u:%u", snd_seq_client_id(data.seq), port, dest_client, dest_port);
 	//Input holder
 	int c;
-	//Y for rows
-	int row1 = posy+6;
-	int row2 = posy+3;
-	//xy
-	int x,y;
 	//length
 	int leng = 100;
 	//Loop until user quits
 	while ((c = getch()) != EOF) {
+		//whether or not to play a note
+		bool do_play = false;
 		switch (c) {
 			case KEY_RESIZE:
 			case KEY_BACKSPACE:
 				goto exit;
 			case KEY_DOWN:
-				y = -1;
 				if (leng > 0) {
 					leng-=10;
 				}
 				mvprintw(0, COLS-11, "Length %4d", leng);
 				break;
 			case KEY_UP:
-				y = -1;
 				if (leng < 1000) {
 					leng+=10;
 				}
 				mvprintw(0, COLS-11, "Length %4d", leng);
 				break;
 			case KEY_LEFT:
-				y = -1;
-				if (octave > 1) {
-					octave--;
+				if (data.octave > 1) {
+					data.octave--;
 				}
-				mvprintw(0, 0, "Octave %d", octave);
+				mvprintw(0, 0, "Octave %d", data.octave);
 				break;
 			case KEY_RIGHT:
-				y = -1;
-				if (octave < 5) {
-					octave++;
+				if (data.octave < 5) {
+					data.octave++;
 				}
-				mvprintw(0, 0, "Octave %d", octave);
+				mvprintw(0, 0, "Octave %d", data.octave);
 				break;
 			case 'z':
-				y = row1;
-				x = posx+2;
-				set(y, x, c, 1);
-				notemask |= C;
+				do_play = set_note(&data, C);
 				break;
 			case 'x':
-				y = row1;
-				x = posx+6;
-				set(y, x, c, 1);
-				notemask |= D;
+				do_play = set_note(&data, D);
 				break;
 			case 'c':
-				y = row1;
-				x = posx+10;
-				set(y, x, c, 1);
-				notemask |= E;
+				do_play = set_note(&data, E);
 				break;
 			case 'v':
-				y = row1;
-				x = posx+14;
-				set(y, x, c, 1);
-				notemask |= F;
+				do_play = set_note(&data, F);
 				break;
 			case 'b':
-				y = row1;
-				x = posx+18;
-				set(y, x, c, 1);
-				notemask |= G;
+				do_play = set_note(&data, G);
 				break;
 			case 'n':
-				y = row1;
-				x = posx+22;
-				set(y, x, c, 1);
-				notemask |= A;
+				do_play = set_note(&data, A);
 				break;
 			case 'm':
-				y = row1;
-				x = posx+26;
-				set(y, x, c, 1);
-				notemask |= B;
+				do_play = set_note(&data, B);
 				break;
 			case 'q':
-				y = row1;
-				x = posx+30;
-				set(y, x, c, 1);
-				notemask |= C1;
+				do_play = set_note(&data, C1);
 				break;
 			case 'w':
-				y = row1;
-				x = posx+34;
-				set(y, x, c, 1);
-				notemask |= D1;
+				do_play = set_note(&data, D1);
 				break;
 			case 'e':
-				y = row1;
-				x = posx+38;
-				set(y, x, c, 1);
-				notemask |= E1;
+				do_play = set_note(&data, E1);
 				break;
 			case 'r':
-				y = row1;
-				x = posx+42;
-				set(y, x, c, 1);
-				notemask |= F1;
+				do_play = set_note(&data, F1);
 				break;
 			case 't':
-				y = row1;
-				x = posx+46;
-				set(y, x, c, 1);
-				notemask |= G1;
+				do_play = set_note(&data, G1);
 				break;
 			case 'y':
-				y = row1;
-				x = posx+50;
-				set(y, x, c, 1);
-				notemask |= A1;
+				do_play = set_note(&data, A1);
 				break;
 			case 'u':
-				y = row1;
-				x = posx+54;
-				set(y, x, c, 1);
-				notemask |= B1;
+				do_play = set_note(&data, B1);
 				break;
 			case 'i':
-				y = row1;
-				x = posx+58;
-				set(y, x, c, 1);
-				notemask |= C2;
+				do_play = set_note(&data, C2);
 				break;
 			case 's':
-				y = row2;
-				x = posx+4;
-				set(y, x, c, 1);
-				notemask |= C_;
+				do_play = set_note(&data, C_);
 				break;
 			case 'd':
-				y = row2;
-				x = posx+8;
-				set(y, x, c, 1);
-				notemask |= D_;
+				do_play = set_note(&data, D_);
 				break;
 			case 'g':
-				y = row2;
-				x = posx+16;
-				set(y, x, c, 1);
-				notemask |= F_;
+				do_play = set_note(&data, F_);
 				break;
 			case 'h':
-				y = row2;
-				x = posx+20;
-				set(y, x, c, 1);
-				notemask |= G_;
+				do_play = set_note(&data, G_);
 				break;
 			case 'j':
-				y = row2;
-				x = posx+24;
-				set(y, x, c, 1);
-				notemask |= A_;
+				do_play = set_note(&data, A_);
 				break;
 			case '2':
-				y = row2;
-				x = posx+32;
-				set(y, x, c, 1);
-				notemask |= C_1;
+				do_play = set_note(&data, C_1);
 				break;
 			case '3':
-				y = row2;
-				x = posx+36;
-				set(y, x, c, 1);
-				notemask |= D_1;
+				do_play = set_note(&data, D_1);
 				break;
 			case '5':
-				y = row2;
-				x = posx+44;
-				set(y, x, c, 1);
-				notemask |= F_1;
+				do_play = set_note(&data, F_1);
 				break;
 			case '6':
-				y = row2;
-				x = posx+48;
-				set(y, x, c, 1);
-				notemask |= G_1;
+				do_play = set_note(&data, G_1);
 				break;
 			case '7':
-				y = row2;
-				x = posx+52;
-				set(y, x, c, 1);
-				notemask |= A_1;
+				do_play = set_note(&data, A_1);
 				break;
 			default:
-				y = -1;
-				x = -1;
 				break;
 		}
-		if (y != -1) {
-			set(y, x, c, 0);
-			play(seq, notemask, octave);
-			signotify.offmask |= notemask;
-			notemask = 0;
-			signotify.octave = octave;
+		if (do_play) {
+			play(data.seq, data.notemask, data.octave);
+			data.offmask |= data.notemask;
+			data.notemask = 0;
 			if (timer_gettime(note_timer, NULL)) {
 				struct itimerspec time = {{ 0 }};
 				time.it_value.tv_nsec = leng * 1000000;
@@ -362,7 +332,7 @@ int main(int argc, char** argv)
 	}
 exit:
 	endwin();
-	snd_seq_close(seq);
+	snd_seq_close(data.seq);
 	return 0;
 }
 
@@ -397,19 +367,14 @@ void play(snd_seq_t* s, unsigned mask, int octave)
 	//usleep(len*1000);
 }
 
-void set(int y, int x, char c, int state)
+void set(int x, int y, int state)
 {
 	//Either turn on or off key highlight
-	move(y,x);
-	if (state == 1) {
-		addch(c | A_STANDOUT);
-	} else {
-		addch(c);
-	}
+	mvchgat(y, x, 1, (state ? A_STANDOUT : A_NORMAL), 0, NULL);
 	refresh();
 }
 
-void draw(int posy, int posx)
+void draw(int posx, int posy)
 {
 	//Clear the screen and draw the keyboard, terminal size dependent
 	clear();
